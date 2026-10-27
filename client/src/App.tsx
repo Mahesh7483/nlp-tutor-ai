@@ -167,8 +167,21 @@ export default function App() {
 
         {healthError && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-[12.5px] text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
-            Could not reach the backend at <code>/api/health</code> — {healthError}. Start it with{" "}
-            <code className="font-mono">npm run dev:server</code> in a second terminal.
+            Could not reach the backend at <code>/api/health</code> — {healthError}.{" "}
+            {typeof window !== "undefined" &&
+            window.location.hostname !== "localhost" &&
+            window.location.hostname !== "127.0.0.1" ? (
+              <>
+                You're viewing a hosted frontend: the Express backend must be deployed separately
+                and configured via <code className="font-mono">VITE_API_BASE</code> (see the
+                README's "Hosting online" section) — locally, <code className="font-mono">npm run dev:server</code> is enough.
+              </>
+            ) : (
+              <>
+                Start it with <code className="font-mono">npm run dev:server</code> in a second
+                terminal.
+              </>
+            )}
           </div>
         )}
 
