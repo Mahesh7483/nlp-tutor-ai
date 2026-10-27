@@ -1,0 +1,20 @@
+# Render Blueprint — deploys the whole app (API + built frontend) as ONE free web service.
+#
+# How to use: Render dashboard → "New +" → "Blueprint" → pick this repo → Apply.
+# Render gives you a URL like https://nlp-tutor-ai.onrender.com — the site and the
+# /api endpoints are served from that single origin (no extra config).
+#
+# Free plan notes: the service sleeps after ~15 minutes idle (first request after
+# a nap takes ~30–60 s to boot) and holds in-memory data only — uploaded documents
+# disappear when the service restarts, exactly like locally.
+#
+# Optional live AI mode: add AI_API_KEY / AI_BASE_URL / AI_MODEL in the Render
+# dashboard (Environment → Environment Variables). Never commit them to git.
+services:
+  - type: web
+    name: nlp-tutor-ai
+    runtime: node
+    plan: free
+    buildCommand: npm ci --prefix server && npm ci --prefix client && npm run build --prefix client && npm run build --prefix server
+    startCommand: npm run start --prefix server
+    healthCheckPath: /api/health

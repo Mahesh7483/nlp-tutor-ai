@@ -6,7 +6,8 @@ import type {
   QuizResponse,
 } from "../types";
 
-const BASE = "/api";
+const RAW_API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
+const BASE = `${RAW_API_BASE}/api`;
 
 export class ApiError extends Error {
   status: number;

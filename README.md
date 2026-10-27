@@ -86,6 +86,41 @@ npm run build              # builds server/dist + client/dist
 cd server && npm start     # serves API + built frontend on http://localhost:8787
 ```
 
+## Hosting online (free)
+
+Two supported paths — both need a GitHub repo first:
+
+```bash
+gh repo create nlp-tutor-ai --public --source . --remote origin --push
+```
+
+### Option A — one Render service (whole app on one URL)
+
+This repo ships a `render.yaml` Blueprint. In the Render dashboard:
+**New + → Blueprint →** connect this repo **→ Apply**. Render builds the client
+and server and serves *everything* (site + `/api`) from one URL such as
+`https://nlp-tutor-ai.onrender.com` — no extra configuration.
+
+Free-plan notes: the service naps after ~15 min idle (first request after a nap
+takes ~30–60 s) and holds in-memory data only — uploaded documents vanish on
+restart, same as locally. This repo has CI (`.github/workflows/ci.yml`) that
+runs typecheck + tests on every push.
+
+### Option B — GitHub Pages frontend + Render API backend
+
+1. **Frontend:** repo **Settings → Pages → Build and deployment → Source:
+   "GitHub Actions"**. `deploy-pages.yml` then builds and publishes the client
+   on every push to `master` (≈ `https://<user>.github.io/nlp-tutor-ai/`).
+2. **Backend:** deploy the Render Blueprint above (or any Node host that
+   honours `PORT` — the server already reads it).
+3. **Connect them:** create a repo *variable*
+   (**Settings → Secrets and variables → Actions → Variables**) named
+   `VITE_API_BASE` with the backend origin (e.g. `https://nlp-tutor-ai.onrender.com`,
+   no trailing slash) and re-run the *Deploy client to GitHub Pages* workflow.
+   Without it, the built site still loads but chat can't reach a backend.
+
+CORS is open by default so a Pages frontend can talk to a Render API directly.
+
 ## Enabling live AI answers
 
 1. Copy `server/.env.example` → `server/.env`.
