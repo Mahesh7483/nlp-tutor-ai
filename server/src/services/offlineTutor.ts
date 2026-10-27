@@ -44,9 +44,129 @@ function scoreCard(card: TopicCard, text: string): number {
   return score;
 }
 
+/* ------------------------------------------------------------------ */
+/* Catching layer: normalize + paraphrase fragments + fuzzy matching.  */
+/* Lets the engine "catch" human-style questions: typos ("toknization"),
+ * spaced/dashed terms ("tf idf", "bag of words"), reworded phrasings.  */
+/* ------------------------------------------------------------------ */
+
+function normalizeMessage(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[\u2010-\u2015]/g, " ") // dashes → spaces
+    .replace(/[^a-z0-9\s]/g, " ") // punctuation → spaces
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  let prev = new Array<number>(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    const curr = [i];
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+    }
+    prev = curr;
+  }
+  return prev[b.length];
+}
+
+/** Per-topic regex fragments applied to the NORMALIZED message. */
+const CATCH_FRAGMENTS: Record<string, string[]> = {
+  intro: ["\\bn ?l ?p\\b|natural language processing|nlp applications"],
+  preprocessing: ["normali[sz]|\\bclean\\b|unicode|lowercas|preprocess"],
+  tokenization: ["token[isz]|subword|word ?piece|sentence ?piece|\\bbpe\\b"],
+  regex: ["regex|regular expression"],
+  stopwords: ["stop ?words?|stopword"],
+  stemming: ["stemm|lemmati|lemma|porter|snowball"],
+  ngram: ["n ?gram|bigram|trigram|language model|smooth|laplace|kneser|perplex"],
+  pos: ["\\bpos\\b|part of speech|viterbi|tagg"],
+  ner: ["\\bner\\b|named entit|entity recognition"],
+  parsing: ["\\bpars(e|er|ing)\\b|constituen|dependenc"],
+  syntax: ["anaphor|coref|discourse|word sense|ambiguit|pragmat"],
+  tfidf: ["tf ?idf|bag ?of ?words|\\bbow\\b|one ?hot|term frequency|inverse document freq"],
+  embeddings: ["embedding|word2vec|skip ?gram|\\bcbow\\b|glove|fasttext"],
+  classification: ["sentiment|spam|classif|vader"],
+  "mt-summarization-qa": ["translat|summar|question answer|\\bqa\\b|abstractive|extractive"],
+  "rnn-lstm": ["\\brnn\\b|\\blstm\\b|\\bgru\\b|seq ?2 ?seq|recurrent"],
+  attention: ["transformer|attention|self ?attention|positional en|multi ?head"],
+  "bert-gpt": ["\\bbert\\b|\\bgpt\\b|masked language model|transfer learning|fine ?tun|pretrain"],
+  "llm-rag": ["\\bllm\\b|\\brag\\b|prompt|hallucinat|retrieval aug|in ?context|few ?shot|zero ?shot"],
+  evaluation: ["evaluat|\\bf ?1\\b|precision|recall|\\bbleu\\b|\\brouge\\b|perplex|accuracy|confusion matrix|metric"],
+  responsible: ["\\bbias\\b|fairness|privacy|gdpr|toxicity|prompt injection|drift|deployment|ethic"],
+};
+
+/** Per-topic terms tolerated with small spelling errors (len ≥ 4 only). */
+const FUZZY_TERMS: Record<string, string[]> = {
+  preprocessing: ["normalization", "normalisation", "lowercase", "cleaning"],
+  tokenization: ["tokenization", "tokenisation", "tokenizer"],
+  regex: ["regex"],
+  stopwords: ["stopwords", "stopword"],
+  stemming: ["stemming", "lemmatization", "lematisation"],
+  ngram: ["bigram", "trigram", "laplace", "perplexity"],
+  pos: ["tagging", "tagger", "viterbi"],
+  parsing: ["dependency", "constituency", "parser"],
+  syntax: ["anaphora", "coreference", "discourse", "ambiguity", "semantics"],
+  tfidf: ["tfidf"],
+  embeddings: ["word2vec", "glove", "fasttext"],
+  classification: ["sentiment", "classification", "spam"],
+  "mt-summarization-qa": ["summarization", "summarisation", "translation", "abstractive"],
+  "rnn-lstm": ["recurrent", "seq2seq"],
+  attention: ["attention", "transformer", "positional"],
+  "llm-rag": ["prompt", "hallucination", "retrieval"],
+  evaluation: ["perplexity", "precision", "recall", "confusion"],
+  responsible: ["bias", "fairness", "privacy"],
+};
+
+function catchBonus(
+  cardId: string,
+  normalized: string,
+  tokens: string[],
+): number {
+  let score = 0;
+  // 1) normalized-paraphrase fragments (spacing/hyphen/rewording variants)
+  let fragmentHits = 0;
+  for (const frag of CATCH_FRAGMENTS[cardId] ?? []) {
+    try {
+      if (new RegExp(frag, "i").test(normalized)) fragmentHits += 1;
+    } catch {
+      /* a bad fragment must never crash the engine */
+    }
+  }
+  if (fragmentHits > 0) score += 3; // one clean fragment ≈ one keyword hit
+  // 2) fuzzy (typo-tolerant) matching against curated topic terms
+  let fuzzyHits = 0;
+  for (const term of FUZZY_TERMS[cardId] ?? []) {
+    if (term.length < 4) continue;
+    for (const tok of tokens) {
+      if (tok.length < 4) continue;
+      const d = levenshtein(term, tok);
+      // distance 1 always counts; distance 2 only for long words that share
+      // a 3-letter prefix ("tokanisation"≈"tokenization" ✅, but "learning"
+      // must NOT hit "cleaning" — different prefixes, so no match).
+      const doubledOk =
+        d === 2 && term.length >= 8 && tok.length >= 8 && term.slice(0, 3) === tok.slice(0, 3);
+      if (d === 1 || doubledOk) {
+        fuzzyHits += 1;
+        break;
+      }
+    }
+  }
+  return score + Math.min(fuzzyHits, 2) * 3;
+}
+
 function scoreAll(text: string): Array<{ card: TopicCard; score: number }> {
-  return TOPIC_CARDS.map((card) => ({ card, score: scoreCard(card, text) }))
-    .sort((a, b) => b.score - a.score);
+  const normalized = normalizeMessage(text);
+  const tokens = Array.from(new Set(normalized.split(" ")));
+  return TOPIC_CARDS.map((card) => ({
+    card,
+    score: scoreCard(card, text) + catchBonus(card.id, normalized, tokens),
+  })).sort((a, b) => b.score - a.score);
 }
 
 /** A match counts when at least one distinct keyword phrase hits. */
@@ -100,15 +220,15 @@ const RE = {
     /^(hi+|hey+|hello+|yo|sup|namaste|hola|greetings|good\s+(morning|afternoon|evening))\b[\s!,.]*(there)?[\s!,.]*$/i,
   thanks: /\b(thank(s| you|you)|thx|thanks a lot|that helped|really helpful)\b/i,
   capabilities:
-    /\bwhat can (you|u) (do|help)|how (can|do) (you|u) help|who (are|r) (you|u)|what are you|your (features|capabilit)/i,
+    /\bwhat can (you|u) (do|help)|how (can|do) (you|u) help|who (are|r) (you|u)|what are you|your (features|capabilit)|^\s*help\s*[?!.]*$/i,
   identity: /\b(are you (chatgpt|gpt|openai|an? ai|a bot|a real|human)|your name|what model|which model|made you|created you)\b/i,
   topicsList:
-    /\b(what|which) topics|topics? (can|do) you (teach|cover|know)|list (of )?topics|topic list|what should i (study|learn|revise)|syllabus coverage|what do you know\b/i,
-  compare: /\b(vs\.?|versus|differences? between|compare(d)? (to|with|them)?|contrast)\b/i,
+    /\b(what|which) topics|topics? (can|do) you (teach|cover|know)|list (of )?topics|topic list|what should i (study|learn|revise)|syllabus coverage|what do you know\b|what (can|do) you teach|^\s*(topics|topic list|menu)\s*[?!.]*$/i,
+  compare: /\b(vs\.?|versus|differences? between|difference of|diff(er)? between|comparison between|compare(d)? (to|with|them)?|contrast|dif\S*\s+between)\b/i,
 
   reveal: /\b(reveal|shows?|gives?|tells?)\s+(me\s+)?(the\s+)?answer\b|^(answer|solution)\b|\b(what'?s|whats) the answer\b/i,
   practice:
-    /\b(ask me|test me|quiz me|practice (question|questions|problem|problems)|give me (a )?(practice )?question|another question|one more question|a question on)\b/i,
+    /\b(ask me|test me|quiz me|practice (question|questions|problem|problems)|give me (a )?(practice )?question|another question|one more question|next (question|one|round)|go again|a question on)\b/i,
   code: /\b(code|snippet|program|implement|write.*python|python (code|script|example)|code for)\b/i,
   exam: /\b(exam|exams|viva|midsem|semester|marks|important (points|questions|topics)|revision|revise|last minute|crash course)\b/i,
   simple:
@@ -117,6 +237,9 @@ const RE = {
     /\b(more deeply|deeper|explain (it |this |that )?(more|further|again)|more detail|elaborat|expand|continue|go on|walk me through|in (more )?depth)\b/i,
   example: /\b(another example|more examples?|real.?world example|one example|use case|where (is|would) (it|this) (used|useful))\b/i,
   quizPage: /\b(generate|create|make|give me).{0,20}\b(quiz|mcqs?)\b|\bmcqs?\b/i,
+  glossary: /\b(glossary|terminolog(y|ies))\b|definition of|meaning of\b|\bdefine [a-z]/i,
+  roadmap:
+    /\b(roadmap|study plan|learning path|syllabus plan)\b|\bhow (do|should) i (start|begin|study|learn)\b/i,
 
   deepish: /\b(explain|teach me|step by step|in depth|in detail|detail(ed)?|deep dive|thorough|from scratch|full lesson|everything about)\b/i,
 
@@ -530,6 +653,21 @@ function quizPointerAnswer(card: TopicCard | null): string {
   return `For a full multiple-choice quiz${topic}, open the **Quiz** tab (beaker icon in the top bar) and hit *Generate* — it builds a fresh MCQ set and scores you with per-question explanations.\n\nPrefer staying here in chat? I can drill you verbally instead: say **“ask me a practice question”${card ? "" : " on any topic"}** and I'll pose one, then **“show answer”** to walk through it.`;
 }
 
+function glossaryPointerAnswer(): string {
+  return `Quick definitions live in the **Glossary** tab (book icon in the top bar) — 45+ NLP terms with examples, and each entry has an “Ask tutor” jump that starts a full chat explanation.\n\nIf you want a proper lesson instead (intuition → steps → example → exam notes), just ask about the topic directly, e.g. **“explain perplexity”** or **“explain attention”**.`;
+}
+
+function roadmapPointerAnswer(): string {
+  const L: string[] = [];
+  L.push(`For the big picture, open the **Roadmap** tab (map icon in the top bar) — it lays the whole subject out in **8 stages** (text basics → classical ML → deep learning → deployment), each with prerequisites and checkboxes, and your ticked progress saves in your browser.`);
+  L.push("", `A good loop between me and the roadmap:`);
+  L.push(`1. Tick what you've already covered in the Roadmap tab;`);
+  L.push(`2. Ask me here for any stage's topic, e.g. **“explain tokenization step by step”**;`);
+  L.push(`3. Say **“ask me a practice question”** to lock it in, and **“exam notes on X”** the night before.`);
+  L.push("", `Or skip planning and dive straight into a topic — say **“topics”** for the full list.`);
+  return L.join("\n");
+}
+
 function needTopicAnswer(kind: "code" | "practice" | "detail" | "example" | "exam" | "simple"): string {
   const ask: Record<string, string> = {
     code: "write Python for",
@@ -595,6 +733,23 @@ export function composeOfflineAnswer(ctx: OfflineContext): string {
   /* ---------- 1) topical matching ------------------------------------ */
   const ranked = scoreAll(message);
   const matches = ranked.filter((r) => r.score >= MATCH_THRESHOLD);
+
+  /* Explicit study-planning questions ("how do I start", "study plan")
+     pre-empt lessons — unless a real topic (not the generic NLP intro
+     card) matched strongly, or an exam/quiz lane is clearly in play. */
+  const nonIntroMatch = ranked.find(
+    (r) => r.score >= MATCH_THRESHOLD && r.card.id !== "intro",
+  );
+  if (
+    !nonIntroMatch &&
+    RE.roadmap.test(message) &&
+    !RE.exam.test(message) &&
+    !RE.practice.test(message) &&
+    !RE.code.test(message)
+  ) {
+    return roadmapPointerAnswer();
+  }
+
   const followupKind: "code" | "practice" | "detail" | "example" | "exam" | "simple" | null = (() => {
     if (RE.reveal.test(message)) return null; // reveal handled via lastTopic below
     if (RE.code.test(message)) return "code";
@@ -638,7 +793,11 @@ export function composeOfflineAnswer(ctx: OfflineContext): string {
     /* topical answers with modifiers */
     if (followupKind === "code") return codeAnswer(best.card);
     if (followupKind === "practice") return practiceAnswer(best.card);
-    if (followupKind === "exam") return examAnswer([best.card]);
+    if (followupKind === "exam") {
+      // "Generate important NLP exam questions" only matches the generic
+      // intro card — the general exam sheet reads better than one topic's.
+      return best.card.id === "intro" ? generalExamAnswer() : examAnswer([best.card]);
+    }
     if (followupKind === "simple") return simpleAnswer(best.card);
     if (followupKind === "example") return exampleAnswer(best.card);
     if (followupKind === "detail" || RE.deepish.test(message)) return fullLesson(best.card);
@@ -675,6 +834,7 @@ export function composeOfflineAnswer(ctx: OfflineContext): string {
   }
 
   /* ---------- 3) pure conversation ----------------------------------- */
+  if (RE.glossary.test(message)) return glossaryPointerAnswer();
   if (RE.capabilities.test(message)) return capabilitiesAnswer();
   if (RE.identity.test(message)) return identityAnswer();
   if (RE.topicsList.test(message)) return topicsAnswer();

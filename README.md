@@ -122,6 +122,11 @@ Keys live only in `server/.env` (git-ignored) and are never sent to the browser.
   "ask me a practice question", "show answer" one-click chips (and typed phrasings) resolve against
   the last discussed topic per chat. Every session starts with a one-time offline banner, not one
   per message.
+- **Catching human-style questions** — message normalization (punctuation/dashes), paraphrase
+  fragments ("tf idf", "bag of words") and typo-tolerant fuzzy matching ("explian tokanisation",
+  "difrence between stemming and lemmatization") so misspelled or loosely-phrased questions still
+  land on the right lesson; glossary definitions and study-planning asks route to the Glossary /
+  Roadmap views, while concrete topics still win over the pointers.
 - **Topic knowledge base** — 20 NLP topic cards (intro, preprocessing/Unicode, tokenization, regex,
   stopwords, stemming/lemmatization, n-gram LMs, POS, NER, parsing, syntax/semantics/discourse,
   BoW/TF-IDF, embeddings, classification/sentiment, MT/summarization/QA, RNN/LSTM, attention/
@@ -154,10 +159,11 @@ Keys live only in `server/.env` (git-ignored) and are never sent to the browser.
 All of the following were actually run during development on this machine:
 
 - `tsc --noEmit` for server and client — clean.
-- Server unit tests (`npm test` in `server/`) — **19/19 pass**: quiz bank integrity/sampling,
+- Server unit tests (`npm test` in `server/`) — **21/21 pass**: quiz bank integrity/sampling,
   chunk/grounding retrieval behaviour, and a dedicated offline-engine suite (knowledge-base integrity,
   greetings, lessons, per-chat follow-up memory, comparison tables, practice→reveal loop, exam sheets,
-  quiz routing, honest bounding of scope, one-per-chat banner).
+  quiz routing, honest bounding of scope, one-per-chat banner, typo/paraphrase catching, glossary +
+  roadmap routing).
 - Vite production build — clean (bundle split into index/markdown/katex chunks).
 - API tests against the running backend (offline mode, no credentials):
   - `GET /api/health` → `{ mode: "demo", requires: [...] }` (demo/offline protocol value kept for compatibility)
@@ -165,7 +171,9 @@ All of the following were actually run during development on this machine:
     greetings, quick vs deep lessons (+code), follow-ups via chat memory, curated comparison tables,
     code answers, exam prep, simplify, quiz routing, thanks/smalltalk, yes/no continuations,
     off-topic refusal, unknown-topic honesty, and the offline banner appearing only on the first
-    message of a chat
+    message of a chat — plus a 9-case catch battery (typo'd questions → full lessons, spaced
+    "tf idf", typo'd comparisons → curated table, roadmap/glossary routing, unchanged honest
+    refusal for truly out-of-scope asks).
   - empty message → HTTP 400 with validation message; >8000-char message → HTTP 400
   - chat for a non-existent docId → HTTP 404 with a re-upload hint
   - grounded doc question (txt and 2-page PDF) → excerpts cited `[Notes p.1]` / `[Notes p.2]`

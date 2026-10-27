@@ -95,6 +95,33 @@ describe("offline tutor engine", () => {
     assert.match(unknown, /upload/i);
   });
 
+  it("catches typos and loose human phrasings", () => {
+    assert.match(
+      ask("explian tokanisation step by step", { chatId: "catch-1" }),
+      /How it works, step by step/,
+    );
+    assert.match(
+      ask("what is tf idf", { chatId: "catch-2" }),
+      /Bag of Words, one-hot encoding and TF-IDF/,
+    );
+    assert.match(ask("how does bag of words work", { chatId: "catch-3" }), /Bag of Words/);
+    assert.match(
+      ask("difrence between stemming and lemmatization", { chatId: "catch-5" }),
+      /Rule of thumb/,
+    );
+    assert.match(
+      ask("write pyton code for sentament analisis", { chatId: "catch-4" }),
+      /pip install scikit-learn/,
+    );
+  });
+
+  it("routes glossary definitions and study-planning asks", () => {
+    assert.match(ask("definition of chatbot", { chatId: "point-1" }), /Glossary/);
+    assert.match(ask("how should i start learning NLP?", { chatId: "point-2" }), /Roadmap/);
+    // ...but a concrete topic lesson beats the pointers
+    assert.match(ask("how do i learn regex?", { chatId: "point-3" }), /Regular expressions/);
+  });
+
   it("banner shows once per chat and not afterwards", () => {
     const chatId = "banner-chat-test";
     assert.equal(shouldShowOfflineBanner(chatId), true);
