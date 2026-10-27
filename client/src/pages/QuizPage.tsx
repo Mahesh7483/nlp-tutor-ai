@@ -40,7 +40,7 @@ export function QuizPage({ onAskTutor }: { onAskTutor: (prompt: string) => void 
       setSource(
         res.source === "ai"
           ? "Generated live by your configured AI model."
-          : "Built from the offline practice bank (demo mode, or AI generation failed).",
+          : "Built from the offline practice bank (offline mode, or AI generation failed).",
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

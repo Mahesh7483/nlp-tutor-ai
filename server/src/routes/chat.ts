@@ -8,8 +8,12 @@ import {
   buildUpstreamMessages,
   UpstreamError,
 } from "../services/aiProvider.js";
-import { buildDemoAnswer, DEMO_BANNER } from "../services/demoEngine.js";
-import { retrieveGrounding, hasDocument } from "../services/docStore.js";
+import {
+  OFFLINE_BANNER,
+  composeOfflineAnswer,
+  shouldShowOfflineBanner,
+} from "../services/offlineTutor.js";
+import { retrieveGrounding, hasDocument, getDocument } from "../services/docStore.js";
 import { HttpError, type ChatStreamEvent } from "../types.js";
 
 export const chatRouter = Router();
@@ -76,26 +80,40 @@ chatRouter.post(
 
     try {
       if (config.mode === "demo") {
-        // Demo mode: grounded doc questions show the honest retrieved excerpts.
+        // Offline engine: grounded doc questions quote retrieved excerpts;
+        // everything else is composed by the built-in tutor engine.
         let answer: string;
+        const banner = shouldShowOfflineBanner(body.chatId) ? OFFLINE_BANNER : "";
         if (body.docQuestion && body.docId) {
           const grounding = retrieveGrounding(body.docId, body.message);
           if (grounding) {
             const excerpts = grounding.chunks
               .map((c) => `> **[Notes p.${c.page}]** ${c.text.slice(0, 500)}${c.text.length > 500 ? "…" : ""}`)
               .join("\n\n");
-            answer = `${DEMO_BANNER}**Demo mode can check your notes but cannot compose a live grounded answer** (no AI provider configured). Here is what the document "${grounding.docName}" contains for your question:\n\n${excerpts}\n\n---\nWith a live provider (\`AI_API_KEY\`, \`AI_BASE_URL\`, \`AI_MODEL\` in \`server/.env\`), this answer would explain the excerpts in detail, citing these page numbers.`;
+            answer = `${banner}**Offline mode can check your notes but cannot compose a live grounded answer** (no AI provider configured). Here is what the document "${grounding.docName}" contains for your question:\n\n${excerpts}\n\n---\nWith a live provider (\`AI_API_KEY\`, \`AI_BASE_URL\`, \`AI_MODEL\` in \`server/.env\`), this answer would explain the excerpts in detail, citing these page numbers.`;
+          } else if (hasDocument(body.docId)) {
+            const docName = getDocument(body.docId)?.name ?? "that document";
+            answer = `${banner}I checked **"${docName}"** — hmm, no passage there matched "${body.message.slice(0, 80)}". Try rephrasing, or detach the 📎 and ask me directly from my built-in NLP knowledge base.`;
           } else {
-            answer = `${DEMO_BANNER}The document you referenced no longer exists on the server. Please re-upload it from the **Documents** panel.`;
+            answer = `${banner}The document you referenced no longer exists on the server. Please re-upload it from the **Documents** panel.`;
           }
         } else {
-          answer = buildDemoAnswer(body);
+          answer = banner + composeOfflineAnswer({
+            chatId: body.chatId,
+            message: body.message,
+            history: body.history,
+          });
         }
-        // Stream the canned answer in small chunks for a realistic feel.
-        const step = 24;
-        for (let i = 0; i < answer.length && !abort.signal.aborted; i += step) {
-          writeEvent(res, { type: "delta", text: answer.slice(i, i + step) });
-          await sleep(8);
+        // Human-ish rhythm: a short "thinking" pause, then variable-size
+        // chunks with jitter, easing off at paragraph breaks.
+        await sleep(400 + Math.floor(Math.random() * 400));
+        let i = 0;
+        while (i < answer.length && !abort.signal.aborted) {
+          const take = Math.min(8 + Math.floor(Math.random() * 22), answer.length - i);
+          const chunk = answer.slice(i, i + take);
+          writeEvent(res, { type: "delta", text: chunk });
+          i += take;
+          await sleep(chunk.includes("\n\n") ? 70 + Math.random() * 80 : 6 + Math.random() * 12);
         }
         if (!abort.signal.aborted) writeEvent(res, { type: "done" });
       } else {

@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -40,7 +40,7 @@ function CopyButton({ text, className = "" }: { text: string; className?: string
 }
 
 /** Code block with language label + working copy button. */
-function CodeBlock({ language, code }: { language: string; code: string }) {
+function CodeBlock({ language, code, children }: { language: string; code: string; children: ReactNode }) {
   return (
     <div className="group relative my-3 overflow-hidden rounded-xl border border-slate-200 dark:border-zinc-700/80">
       <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100/80 px-3 py-1.5 dark:border-zinc-700/80 dark:bg-zinc-800/80">
@@ -50,11 +50,19 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
         </span>
         <CopyButton text={code} />
       </div>
-      <pre className="!my-0 !rounded-none !border-0 bg-white p-4 dark:bg-[#0b1020]">
-        <code className={`language-${language}`}>{code}</code>
-      </pre>
+      <pre className="!my-0 !rounded-none !border-0 bg-white p-4 dark:bg-[#0b1020]">{children}</pre>
     </div>
   );
+}
+
+/** Recursively join hast node text (works with or without highlight spans). */
+function hastText(node: unknown): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(hastText).join("");
+  const n = node as { type?: string; value?: string; children?: unknown[] };
+  if (typeof n.value === "string") return n.value;
+  return (n.children ?? []).map(hastText).join("");
 }
 
 /**
@@ -66,21 +74,24 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
     <div className="md">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex, [rehypeHighlight, { detect: true, ignoreMissing: true }]]}
+        rehypePlugins={[rehypeKatex, [rehypeHighlight, { detect: false, ignoreMissing: true }]]}
         components={{
-          pre: ({ children }) => <>{children}</>,
-          code: ({ className, children, ...props }) => {
-            const raw = String(children).replace(/\n$/, "");
-            const isBlock = /language-/.test(className ?? "") || raw.includes("\n");
-            if (!isBlock) {
-              return (
-                <code className={className} {...props}>
-                  {children}
-                </code>
-              );
-            }
-            const language = /language-(\w+)/.exec(className ?? "")?.[1] ?? "";
-            return <CodeBlock language={language} code={raw} />;
+          // Wrap fenced code in our shell (label + copy button) while keeping
+          // the highlighted spans rehype-highlight produced. Text/copy content
+          // comes from the hast node — never via String(children), which
+          // destroys nested elements into "[object Object]".
+          pre: ({ node, children }) => {
+            const codeNode = ((node as { children?: Array<{ tagName?: string; properties?: { className?: string[] } }> })?.children ?? [])
+              .find((c) => c?.tagName === "code");
+            const classes = Array.isArray(codeNode?.properties?.className) ? codeNode.properties.className : [];
+            const language =
+              String(classes.find((c) => String(c).startsWith("language-")) ?? "").replace("language-", "") || "";
+            const raw = hastText(codeNode).replace(/\n$/, "");
+            return (
+              <CodeBlock language={language} code={raw}>
+                {children}
+              </CodeBlock>
+            );
           },
           a: ({ href, children }) => (
             <a href={href ?? undefined} target="_blank" rel="noreferrer noopener">

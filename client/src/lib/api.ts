@@ -44,6 +44,7 @@ export const getHealth = () => request<HealthResponse>("/health");
 export interface ChatStreamOptions {
   message: string;
   history: ChatRequestMessage[];
+  chatId?: string;
   docId?: string;
   docQuestion?: boolean;
   abortSignal: AbortSignal;
@@ -67,6 +68,7 @@ export async function streamChat(opts: ChatStreamOptions): Promise<void> {
       body: JSON.stringify({
         message: opts.message,
         history: opts.history,
+        chatId: opts.chatId,
         docId: opts.docId,
         docQuestion: opts.docQuestion,
       }),

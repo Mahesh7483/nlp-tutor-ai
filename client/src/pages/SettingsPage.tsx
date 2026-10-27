@@ -66,7 +66,7 @@ export function SettingsPage({ theme, onThemeChange, health }: SettingsPageProps
                       : "bg-amber-100 text-amber-700 dark:bg-amber-950/70 dark:text-amber-400"
                   }`}
                 >
-                  {mode.mode === "live" ? "Live AI" : "Demo mode"}
+                  {mode.mode === "live" ? "Live AI" : "Offline tutor"}
                 </span>
               </p>
               <p className="flex items-center justify-between gap-3">
@@ -80,10 +80,12 @@ export function SettingsPage({ theme, onThemeChange, health }: SettingsPageProps
             </div>
             {mode.mode === "demo" && (
               <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-[13px] text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-                <p className="font-semibold">Demo mode is active</p>
+                <p className="font-semibold">Offline tutor mode is active</p>
                 <p className="mt-1 leading-relaxed">
-                  Answers come from built-in sample lessons, not a live model. To enable real answers,
-                  create <code className="font-mono">server/.env</code> (copy{" "}
+                  Replies come from the built-in NLP knowledge base — a rule-based engine with 20 topic
+                  lessons, Python snippets, comparisons and practice questions. It needs no API key. To
+                  converse with a live model instead, create{" "}
+                  <code className="font-mono">server/.env</code> (copy{" "}
                   <code className="font-mono">server/.env.example</code>) and restart the backend with:
                 </p>
                 <pre className="mt-2 overflow-x-auto rounded-lg bg-amber-950/30 p-2.5 font-mono text-[11.5px] text-amber-100 dark:bg-black/30">
@@ -144,8 +146,9 @@ npm run dev:server`}
           question-answering over uploaded course notes (page-cited, keyword-grounded).
         </p>
         <p className="mt-2 text-[12px] leading-relaxed text-slate-400 dark:text-zinc-500">
-          Limitations: demo mode has canned lessons only; document QA is keyword-based (not full RAG);
-          history is per-browser. Always verify exam-critical facts against your own course material.
+          Limitations: offline mode answers from the built-in NLP knowledge base (not a live LLM);
+          document QA is keyword-based (not full RAG); history is per-browser. Always verify
+          exam-critical facts against your own course material.
         </p>
       </section>
 

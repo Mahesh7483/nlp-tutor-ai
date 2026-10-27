@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BookOpen, Code2, Target } from "lucide-react";
 import type { ProviderMode } from "../types";
 import type { ChatStore } from "../lib/useChatStore";
 import type { DocMeta, HealthResponse } from "../types";
@@ -16,6 +17,13 @@ interface ChatViewProps {
 }
 
 const SCROLL_EPSILON = 60;
+
+/** Quick-reply chips shown under the latest answer (sent verbatim on click). */
+const FOLLOW_UPS = [
+  { text: "Show me Python code for this", icon: Code2 },
+  { text: "Explain it more deeply", icon: BookOpen },
+  { text: "Ask me a practice question", icon: Target },
+] as const;
 
 export function ChatView({ store, health, queuedPrompt, onQueuedPromptHandled }: ChatViewProps) {
   const [input, setInput] = useState("");
@@ -56,6 +64,7 @@ export function ChatView({ store, health, queuedPrompt, onQueuedPromptHandled }:
       await api.streamChat({
         message,
         history,
+        chatId,
         docId,
         docQuestion: Boolean(docId),
         abortSignal: controller.signal,
@@ -191,6 +200,16 @@ export function ChatView({ store, health, queuedPrompt, onQueuedPromptHandled }:
     return null;
   }, [messages]);
 
+  const lastMessage = messages[messages.length - 1];
+  const showFollowUps =
+    Boolean(streamingId) === false &&
+    !streamError &&
+    Boolean(lastMessage) &&
+    lastMessage?.role === "assistant" &&
+    !lastMessage?.error &&
+    !lastMessage?.stopped &&
+    Boolean(lastMessage?.content);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto" onScroll={onScroll}>
@@ -220,6 +239,24 @@ export function ChatView({ store, health, queuedPrompt, onQueuedPromptHandled }:
                 />
               );
             })}
+            {showFollowUps && (
+              <div className="mx-auto flex max-w-3xl flex-wrap gap-2 px-3 pb-3 md:px-6">
+                {FOLLOW_UPS.map((chip) => {
+                  const Icon = chip.icon;
+                  return (
+                    <button
+                      key={chip.text}
+                      type="button"
+                      onClick={() => sendMessage(chip.text)}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[12.5px] text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-blue-700 dark:hover:bg-blue-950/40 dark:hover:text-blue-300"
+                    >
+                      <Icon size={13} />
+                      {chip.text}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
         <div ref={bottomRef} />

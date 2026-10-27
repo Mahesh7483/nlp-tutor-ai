@@ -5,8 +5,10 @@ examples and Python code, streaming markdown answers, quiz practice, a searchabl
 learning roadmap with saved progress, curated code examples, and question-answering over your own
 uploaded course notes with page citations.
 
-It works out of the box in a clearly-labelled **demo mode** (no credentials needed) and switches to
-live answers from any OpenAI-compatible chat-completions provider with three environment variables.
+It works out of the box in a clearly-labelled **offline tutor mode** — a built-in conversational NLP
+engine (topic knowledge base + answer composer) that needs **no API key at all** — and optionally
+switches to live answers from any OpenAI-compatible chat-completions provider with three environment
+variables.
 
 ---
 
@@ -46,7 +48,8 @@ nlp-tutor-ai/
 │       ├── index.ts               # app bootstrap + optional static serving of client/dist
 │       ├── env.ts                 # config + aiStatus (secret-free)
 │       ├── routes/                # health.ts, chat.ts (SSE), documents.ts, quiz.ts
-│       ├── services/              # aiProvider.ts, tutorPrompt.ts, demoEngine.ts, docStore.ts
+│       ├── services/              # offlineTutor.ts (intents + composers), knowledge.ts (20 topic
+│       │                          # cards), aiProvider.ts, tutorPrompt.ts, docStore.ts
 │       ├── demos/quizBank.ts      # offline MCQ bank (+ tests)
 │       └── middleware/validation.ts
 ├── samples/                       # sample-nlp-notes.txt / .pdf for testing document upload
@@ -102,7 +105,7 @@ AI_MODEL=gpt-4o-mini
 - `PORT`, `MAX_MESSAGE_CHARS` (8000), `AI_TIMEOUT_MS` (120000), `MAX_DOC_CHARS` (400000) are optional.
 
 3. Restart `npm run dev:server`. The header pill shows **Live · model-name** (green) when the
-   backend reports live configuration, and stays **Demo mode** (amber) otherwise. The backend never
+   backend reports live configuration, and stays **Offline tutor** (amber) otherwise. The backend never
    fakes a "Connected" state: chat errors (bad key → 401, wrong model → 404, timeouts) surface as
    inline error boxes with a Retry button.
 
@@ -110,11 +113,26 @@ Keys live only in `server/.env` (git-ignored) and are never sent to the browser.
 
 ## Features
 
+- **Real chatbot feel — fully offline, no API.** A rule-based tutor engine (`offlineTutor.ts` +
+  a 20-topic `knowledge.ts`) handles greetings, small talk, "what can you do", topic lessons,
+  comparison requests, code asks, exam prep and practice questions with human-like streaming pacing
+  (thinking pause → jittered chunks → paragraph slowdowns). Honest when it doesn't know something
+  instead of inventing an answer.
+- **Conversational memory of the topic** — "explain it more deeply", "show me the Python code",
+  "ask me a practice question", "show answer" one-click chips (and typed phrasings) resolve against
+  the last discussed topic per chat. Every session starts with a one-time offline banner, not one
+  per message.
+- **Topic knowledge base** — 20 NLP topic cards (intro, preprocessing/Unicode, tokenization, regex,
+  stopwords, stemming/lemmatization, n-gram LMs, POS, NER, parsing, syntax/semantics/discourse,
+  BoW/TF-IDF, embeddings, classification/sentiment, MT/summarization/QA, RNN/LSTM, attention/
+  Transformers, BERT/GPT, LLMs/prompting/RAG, evaluation metrics, responsible AI) each with
+  intuition, steps, worked example, pros/cons, common mistakes and exam notes; 8 curated comparison
+  tables (BERT vs GPT, stemming vs lemmatization, RNN vs Transformer, precision vs recall …).
 - **Streaming tutor chat** with markdown, tables, KaTeX math, syntax-highlighted code blocks with
   copy buttons, stop-generation, regenerate, per-answer copy, error boxes with retry.
-- **Specialized tutoring** via a dedicated system prompt (definition → intuition → steps → example →
-  code → expected output → pros/cons → exam notes → practice question), honest about uncertainty,
-  never claims code was executed, keeps recent conversation context for follow-ups.
+- **Specialized tutoring** (live mode) via a dedicated system prompt (definition → intuition →
+  steps → example → code → expected output → pros/cons → exam notes → practice question), honest
+  about uncertainty, never claims code was executed, keeps recent conversation context.
 - **Quiz Practice** — topic + difficulty (+ mixed) selection, 4 options per question, reveal answer
   and explanation after submit, score summary, recent-round stats; live AI generation when
   configured with automatic fallback to a 40-question built-in bank (labelled honestly either way).
@@ -123,8 +141,9 @@ Keys live only in `server/.env` (git-ignored) and are never sent to the browser.
   gensim) with install commands, sample inputs and approximate outputs (clearly not claimed executed).
 - **Learning roadmap** — 8-stage path with prerequisites and locally-saved progress checkboxes.
 - **Course documents** — upload PDF (text-layer) or plain text, per-page extraction with page
-  references, keyword-grounded answers citing "(Notes, p.N)", explicit separation of notes content
-  from general knowledge, informative errors for unsupported/empty/oversized/unreadable files.
+  references, keyword-grounded answers citing "[Notes p.N]" (offline mode quotes retrieved passages
+  verbatim and says exactly what a live provider would add), informative errors for
+  unsupported/empty/oversized/unreadable files.
 - **Chat history** — create, rename, delete, searched-by-title-and-content, stored in localStorage
   with defensive parsing for corrupted data.
 - **Light/dark/system theme**, responsive desktop sidebar + mobile drawer, accessible labels and
@@ -135,22 +154,30 @@ Keys live only in `server/.env` (git-ignored) and are never sent to the browser.
 All of the following were actually run during development on this machine:
 
 - `tsc --noEmit` for server and client — clean.
-- Server unit tests (`npm test` in `server/`) — **7/7 pass**: quiz bank integrity/sampling and
-  chunk/grounding retrieval behaviour.
+- Server unit tests (`npm test` in `server/`) — **19/19 pass**: quiz bank integrity/sampling,
+  chunk/grounding retrieval behaviour, and a dedicated offline-engine suite (knowledge-base integrity,
+  greetings, lessons, per-chat follow-up memory, comparison tables, practice→reveal loop, exam sheets,
+  quiz routing, honest bounding of scope, one-per-chat banner).
 - Vite production build — clean (bundle split into index/markdown/katex chunks).
-- API tests against the running backend (demo mode, no credentials):
-  - `GET /api/health` → `{ mode: "demo", requires: [...] }`
-  - `POST /api/chat` (demo) → full SSE stream ending `{"type":"done"}` (lesson streamed, ~7.6 kB)
+- API tests against the running backend (offline mode, no credentials):
+  - `GET /api/health` → `{ mode: "demo", requires: [...] }` (demo/offline protocol value kept for compatibility)
+  - `POST /api/chat` → full SSE stream ending `{"type":"done"}`; a 23-scenario battery covering
+    greetings, quick vs deep lessons (+code), follow-ups via chat memory, curated comparison tables,
+    code answers, exam prep, simplify, quiz routing, thanks/smalltalk, yes/no continuations,
+    off-topic refusal, unknown-topic honesty, and the offline banner appearing only on the first
+    message of a chat
   - empty message → HTTP 400 with validation message; >8000-char message → HTTP 400
   - chat for a non-existent docId → HTTP 404 with a re-upload hint
   - grounded doc question (txt and 2-page PDF) → excerpts cited `[Notes p.1]` / `[Notes p.2]`
   - `POST /api/documents` txt + PDF (201, pages/chars extracted), unsupported type → 415 with message
   - `POST /api/quiz` → filtered questions from the built-in bank (`source: "built-in"`)
-- Browser smoke tests (desktop viewport + narrow layout): welcome screen, sending and streaming a
-  demo lesson, regenerate, stop mid-stream (partial text kept), theme toggle (+ persistence),
-  chat create/rename/delete, quiz generate→answer→submit (score + explanations + stats), glossary
-  search + ask-tutor jump, document upload via page fetch → attach → grounded answer with page tag,
-  roadmap checkbox persistence, settings page.
+- Browser smoke tests (desktop viewport + narrow layout): welcome screen, streaming answers with the
+  offline banner + "offline" message tag, sending via the follow-up chips (practice → show answer;
+  code; deep lesson — all verifying rendered content, syntax-highlighted code with correct text), 
+  header "Offline tutor" pill, regenerate, stop mid-stream (partial text kept, "generation stopped"
+  marker), theme toggle (+ persistence), chat create/rename/delete, quiz generate→answer→submit,
+  glossary search + ask-tutor jump, document upload → attach → grounded answer with page tags,
+  roadmap checkbox persistence, settings page, mobile drawer open/close.
 
 **Not verified without credentials (requires an API key):** live-provider chat streaming, live quiz
 generation, provider failure handling (401/404/429/timeout) beyond the code paths — the mapping and
@@ -160,14 +187,17 @@ not performed.
 
 ## Scope & limitations (be aware)
 
-- Demo mode: the tutor's offline engine contains a handful of complete sample lessons
-  (tokenization, TF-IDF, stemming/lemmatization, attention/transformers, embeddings, RNN/LSTM,
-  BERT/GPT/LLM+RAG, evaluation metrics, VADER/transformer sentiment code, exam-prep sheet). It
-  cannot compose arbitrary new explanations — it says so and shows setup instructions.
+- **Offline tutor mode is rule-based, not an LLM.** It matches questions against a curated NLP
+  knowledge base (20 topic cards) and composes structured answers from them. It handles follow-up
+  phrasings and modifiers, but unfamiliar topics get an honest "I don't have a built-in lesson for
+  that" plus closest matches — never fabricated content. Per-chat topic memory lives in server RAM
+  and resets when the backend restarts (history sent by the client is used as fallback).
 - Document QA is **keyword retrieval over extracted text** (chunks capped, ≤10 docs kept, documents
   live in server memory and disappear on restart). This is *not* an embeddings/vector-database RAG
   pipeline; the UI and answers never claim otherwise. The layout is ready to add embedding-based
   retrieval later.
+- The listed Python outputs inside lessons are *indicative* (labelled as such) — nothing is executed
+  by the tutoring server.
 - Chat history is per-browser localStorage; clearing browser data removes it.
 - Extraction requires PDFs with a text layer (scans are rejected with helpful errors).
 
@@ -176,7 +206,7 @@ not performed.
 | Symptom | Fix |
 |---|---|
 | Banner "Could not reach the backend" | Start it: `npm run dev:server` (or `cd server && npm run dev`). |
-| Status pill says Demo mode but you want live answers | The three `AI_*` variables are not set in `server/.env`, or the server wasn't restarted after editing it. |
+| Status pill says Offline tutor but you want live answers | The three `AI_*` variables are not set in `server/.env`, or the server wasn't restarted after editing it. |
 | 401 / 403 in an error box | API key rejected/insufficient for that model — check `AI_API_KEY`. |
 | 404 in an error box | Wrong `AI_BASE_URL` or `AI_MODEL` (e.g. non-chat model). |
 | "Document no longer available" | Server restarted (in-memory store). Re-upload from the Documents page. |

@@ -12,7 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node --import tsx --test src/demos/quizBank.test.ts src/services/grounding.test.ts"
+    "test": "node --import tsx --test src/demos/quizBank.test.ts src/services/grounding.test.ts test/offlineTutor.test.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

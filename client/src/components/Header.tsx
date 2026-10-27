@@ -23,7 +23,7 @@ export function headerStatus(health: HealthResponse | null): { label: string; to
     };
   }
   return {
-    label: "Demo mode",
+    label: "Offline tutor",
     tone: "text-amber-700 border-amber-200 bg-amber-50/70 dark:text-amber-400 dark:border-amber-900/70 dark:bg-amber-950/40",
     icon: WifiOff,
   };
@@ -54,7 +54,7 @@ export function Header({ title, onMenu, onToggleTheme, isDark, health, onClearCh
           health
             ? health.mode === "live"
               ? `Provider ${health.ai.baseUrl ?? ""} · model ${health.ai.model ?? ""}`
-              : "No AI_API_KEY/AI_BASE_URL/AI_MODEL configured — answers come from built-in demo lessons."
+              : "No AI_API_KEY/AI_BASE_URL/AI_MODEL configured — answers come from the built-in NLP knowledge base, fully offline (no external API)."
             : "Checking backend configuration…"
         }
       >
