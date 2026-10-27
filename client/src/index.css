@@ -1,0 +1,233 @@
+@import "tailwindcss";
+
+/* Class-based dark mode (toggled on <html>) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Segoe UI", ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "Consolas", "Menlo", monospace;
+}
+
+:root {
+  color-scheme: light;
+}
+.dark {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-white text-slate-800 antialiased dark:bg-zinc-900 dark:text-zinc-200;
+  scrollbar-width: thin;
+}
+
+/* ---------- headings, detail ---------- */
+::selection {
+  @apply bg-blue-500/30;
+}
+
+/* ---------- markdown content (see Markdown.tsx) ---------- */
+.md {
+  @apply text-[15px] leading-relaxed break-words;
+}
+
+.md > :first-child {
+  margin-top: 0;
+}
+.md > :last-child {
+  margin-bottom: 0;
+}
+
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  @apply mt-5 mb-2 font-semibold tracking-tight text-slate-900 dark:text-zinc-100;
+}
+
+.md h1 {
+  @apply text-xl;
+}
+.md h2 {
+  @apply text-lg;
+}
+.md h3 {
+  @apply text-base;
+}
+.md h4 {
+  @apply text-[15px];
+}
+
+.md p {
+  @apply my-2.5;
+}
+
+.md a {
+  @apply text-blue-600 underline decoration-blue-400/40 underline-offset-2 hover:decoration-blue-500 dark:text-blue-400;
+}
+
+.md ul {
+  @apply my-2.5 list-disc space-y-1 pl-6;
+}
+
+.md ol {
+  @apply my-2.5 list-decimal space-y-1 pl-6;
+}
+
+.md li > ul,
+.md li > ol {
+  @apply my-1;
+}
+
+.md blockquote {
+  @apply my-3 border-l-4 border-blue-300 bg-blue-50/60 rounded-r-lg px-3 py-2 text-[14px] dark:border-blue-700 dark:bg-blue-950/40;
+}
+
+.md table {
+  @apply my-3 w-full border-collapse text-[13.5px];
+}
+
+.md th,
+.md td {
+  @apply border border-slate-200 px-3 py-1.5 text-left align-top dark:border-zinc-700;
+}
+
+.md th {
+  @apply bg-slate-100 font-semibold dark:bg-zinc-800;
+}
+
+.md hr {
+  @apply my-4 border-slate-200 dark:border-zinc-700;
+}
+
+.md code:not(pre code) {
+  @apply rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[13px] font-medium text-rose-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-rose-300;
+}
+
+.md img {
+  @apply my-3 max-w-full rounded-lg border border-slate-200 dark:border-zinc-700;
+}
+
+.md input[type="checkbox"] {
+  @apply mr-1.5 h-3.5 w-3.5 translate-y-[2px] accent-blue-600;
+}
+
+/* ---------- code block ---------- */
+.md pre {
+  @apply my-3 overflow-x-auto rounded-xl border border-slate-200 bg-[#f8fafc] p-4 text-[13px] leading-relaxed dark:border-zinc-700/80 dark:bg-[#0b1020];
+}
+
+.md pre code {
+  @apply font-mono text-[13px];
+}
+
+/* ---------- highlight.js tokens — shared light/dark palette ---------- */
+.hljs-comment,
+.hljs-quote {
+  color: #8a94a3;
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-type {
+  color: #7c3aed;
+}
+.dark .hljs-keyword,
+.dark .hljs-selector-tag,
+.dark .hljs-literal,
+.dark .hljs-type {
+  color: #c4b5fd;
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute {
+  color: #059669;
+}
+.dark .hljs-string,
+.dark .hljs-regexp,
+.dark .hljs-addition,
+.dark .hljs-attribute {
+  color: #6ee7b7;
+}
+.hljs-number,
+.hljs-symbol,
+.hljs-selector-id,
+.hljs-bullet {
+  color: #d97706;
+}
+.dark .hljs-number,
+.dark .hljs-symbol {
+  color: #fcd34d;
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-title.class_,
+.hljs-section {
+  color: #2563eb;
+}
+.dark .hljs-title,
+.dark .hljs-title.function_,
+.dark .hljs-title.class_,
+.dark .hljs-section {
+  color: #93c5fd;
+}
+.hljs-name,
+.hljs-meta,
+.hljs-built_in,
+.hljs-params {
+  color: #db2777;
+}
+.dark .hljs-name,
+.dark .hljs-meta,
+.dark .hljs-built_in,
+.dark .hljs-params {
+  color: #f9a8d4;
+}
+.hljs-variable,
+.hljs-template-variable {
+  color: #0891b2;
+}
+.dark .hljs-variable {
+  color: #67e8f9;
+}
+.hljs-deletion {
+  color: #b91c1c;
+}
+
+/* ---------- KaTeX display tweaks ---------- */
+.katex-display {
+  @apply my-3 overflow-x-auto overflow-y-hidden py-1;
+}
+.dark .katex {
+  color: #e4e4e7;
+}
+
+/* ---------- focus rings ---------- */
+*:focus-visible {
+  outline: 2px solid oklch(0.623 0.214 259.815);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+/* ---------- thin scrollbars ---------- */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+.dark *::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 130, 0.4);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}

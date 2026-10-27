@@ -1,0 +1,10 @@
+﻿NLP UNIT 3 STUDY NOTES
+
+Tokenization
+The word "tokenization" converts raw text into discrete units called tokens. A word-level tokenizer splits on whitespace and punctuation; a subword tokenizer (BPE) learns merges so rare words decompose into frequent pieces. BERT uses WordPiece with the "##" continuation prefix.
+
+TF-IDF
+TF denotes term frequency within a document and IDF down-weights terms that appear in many documents of the corpus. The smoothed idf used by scikit-learn is log(N / (1 + df)) + 1. TF-IDF vectors feed linear classifiers such as Logistic Regression and SVM.
+
+Attention
+The 2017 Transformer replaces recurrence with scaled dot-product attention. Queries, keys and values are linear projections of token embeddings; softmax(QK^T / sqrt(d_k)) V computes the context. Multi-head attention uses several heads in parallel.
