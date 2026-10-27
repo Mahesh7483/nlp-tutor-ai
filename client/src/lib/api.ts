@@ -50,7 +50,7 @@ export interface ChatStreamOptions {
   abortSignal: AbortSignal;
   onMeta?: (mode: "live" | "demo") => void;
   onDelta: (text: string) => void;
-  onDone?: () => void;
+  onDone?: (intent?: string) => void;
   onError: (message: string) => void;
 }
 
@@ -104,10 +104,10 @@ export async function streamChat(opts: ChatStreamOptions): Promise<void> {
   let buffer = "";
   let finished = false;
 
-  const finalize = () => {
+  const finalize = (intent?: string) => {
     if (!finished) {
       finished = true;
-      opts.onDone?.();
+      opts.onDone?.(intent);
     }
   };
 
@@ -147,7 +147,7 @@ export async function streamChat(opts: ChatStreamOptions): Promise<void> {
           if (event.text) opts.onDelta(event.text);
           break;
         case "done":
-          finalize();
+          finalize(event.intent);
           return;
         case "error":
           opts.onError(event.message || "The tutor failed to produce a response.");

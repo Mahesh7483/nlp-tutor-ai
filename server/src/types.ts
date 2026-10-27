@@ -23,7 +23,7 @@ export interface ChatRequestBody {
 export type ChatStreamEvent =
   | { type: "meta"; mode: "live" | "demo"; model: string | null }
   | { type: "delta"; text: string }
-  | { type: "done" }
+  | { type: "done"; intent?: string }
   | { type: "error"; message: string };
 
 /* ---------- Health ---------- */

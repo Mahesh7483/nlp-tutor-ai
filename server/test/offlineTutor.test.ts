@@ -122,6 +122,37 @@ describe("offline tutor engine", () => {
     assert.match(ask("how do i learn regex?", { chatId: "point-3" }), /Regular expressions/);
   });
 
+  it("greets fresh users with a behavioural question back", () => {
+    const g = ask("Hi");
+    assert.match(g, /tutor/i);
+    assert.match(g, /\?/); // asks the user something back
+    assert.ok(g.length < 700);
+  });
+
+  it("welcomes returning users back with their last topic", () => {
+    const chatId = "behav-return";
+    ask("explain embeddings", { chatId }); // establishes memory
+    const again = ask("hi", { chatId });
+    assert.match(again, /Welcome back/);
+    assert.match(again, /embeddings/i);
+  });
+
+  it("remembers your name", () => {
+    const chatId = "behav-name";
+    assert.match(ask("hi, my name is rahul", { chatId }), /Nice to meet you, \*\*Rahul\*\*/);
+    assert.match(ask("hi", { chatId }), /Rahul/);
+  });
+
+  it("handles mood replies after asking about the user", () => {
+    assert.match(ask("i'm good"), /energy|practice|Great/i);
+    assert.match(ask("feeling stressed about the paper", { chatId: "behav-mood" }), /okay|Doable|pressure|gentle/i);
+  });
+
+  it("says goodbye warmly", () => {
+    assert.match(ask("bye", { chatId: "behav-bye" }), /See you|Bye|Goodbye/i);
+    assert.match(ask("good night"), /Goodbye|Bye|See you|roadmap|exam/i);
+  });
+
   it("banner shows once per chat and not afterwards", () => {
     const chatId = "banner-chat-test";
     assert.equal(shouldShowOfflineBanner(chatId), true);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, Code2, Target } from "lucide-react";
+import { BookOpen, Code2, Compass, Map, Target } from "lucide-react";
 import type { ProviderMode } from "../types";
 import type { ChatStore } from "../lib/useChatStore";
 import type { DocMeta, HealthResponse } from "../types";
@@ -24,6 +24,38 @@ const FOLLOW_UPS = [
   { text: "Explain it more deeply", icon: BookOpen },
   { text: "Ask me a practice question", icon: Target },
 ] as const;
+
+/** Chips shown when the last reply wasn't a topic lesson (greetings, moods, pointers…). */
+const EXPLORER_CHIPS = [
+  { text: "What topics do you cover?", icon: Compass },
+  { text: "How should I start learning NLP?", icon: Map },
+  { text: "Ask me a practice question", icon: Target },
+] as const;
+
+/** Reply intents that call for the explorer chips instead of topic chips. */
+const EXPLORER_INTENTS = new Set([
+  "greeting",
+  "bye",
+  "mood",
+  "name",
+  "confirmation",
+  "decline",
+  "conversation",
+  "capabilities",
+  "identity",
+  "topics",
+  "quiz-point",
+  "glossary-point",
+  "roadmap-point",
+  "need-topic",
+  "off-topic",
+  "unknown",
+  "notes-point",
+]);
+
+/* Server used to reject oversized histories (400) — errors show as an empty
+   bubble. Keep sent history within the documented cap. */
+const MAX_HISTORY_SENT = 30; // must stay in sync with the server's limit
 
 export function ChatView({ store, health, queuedPrompt, onQueuedPromptHandled }: ChatViewProps) {
   const [input, setInput] = useState("");
@@ -61,9 +93,10 @@ export function ChatView({ store, health, queuedPrompt, onQueuedPromptHandled }:
       streamModeRef.current = null;
 
       let acc = "";
+      let replyIntent: string | undefined;
       await api.streamChat({
         message,
-        history,
+        history: history.slice(-MAX_HISTORY_SENT),
         chatId,
         docId,
         docQuestion: Boolean(docId),
@@ -75,7 +108,13 @@ export function ChatView({ store, health, queuedPrompt, onQueuedPromptHandled }:
           acc += text;
           setStreamText(acc);
         },
-        onError: (message) => setStreamError(message),
+        onDone: (intent) => {
+          replyIntent = intent;
+        },
+        onError: (message) => {
+          streamErrorRef.current = message; // write through directly: the finaliser reads it before the effect tick
+          setStreamError(message);
+        },
       });
 
       abortRef.current = null;
@@ -89,6 +128,7 @@ export function ChatView({ store, health, queuedPrompt, onQueuedPromptHandled }:
         error: streamErrorRef.current ?? undefined,
         stopped: controller.signal.aborted ? true : undefined,
         mode: streamModeRef.current ?? health.mode,
+        intent: replyIntent,
       }));
     },
     [store, health.mode],
@@ -210,6 +250,9 @@ export function ChatView({ store, health, queuedPrompt, onQueuedPromptHandled }:
     !lastMessage?.stopped &&
     Boolean(lastMessage?.content);
 
+  const followUpChips =
+    lastMessage?.intent && EXPLORER_INTENTS.has(lastMessage.intent) ? EXPLORER_CHIPS : FOLLOW_UPS;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto" onScroll={onScroll}>
@@ -241,7 +284,7 @@ export function ChatView({ store, health, queuedPrompt, onQueuedPromptHandled }:
             })}
             {showFollowUps && (
               <div className="mx-auto flex max-w-3xl flex-wrap gap-2 px-3 pb-3 md:px-6">
-                {FOLLOW_UPS.map((chip) => {
+                {followUpChips.map((chip) => {
                   const Icon = chip.icon;
                   return (
                     <button

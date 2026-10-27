@@ -189,6 +189,29 @@ function rememberTopic(chatId: string | undefined, card: TopicCard): void {
   }
 }
 
+/* Per-chat first names ("my name is Rahul") for personal greetings. */
+const nameByChat = new Map<string, string>();
+
+function tidyName(raw: string): string {
+  const cleaned = raw.trim().replace(/[^a-zA-Z' -]/g, "").replace(/\s+/g, " ").slice(0, 20);
+  return cleaned ? cleaned[0].toUpperCase() + cleaned.slice(1) : "";
+}
+
+function rememberName(chatId: string | undefined, name: string): void {
+  if (!chatId) return;
+  nameByChat.delete(chatId); // refresh recency
+  nameByChat.set(chatId, name);
+  if (nameByChat.size > MAX_TRACKED_CHATS) {
+    const oldest = nameByChat.keys().next().value;
+    if (oldest !== undefined) nameByChat.delete(oldest);
+  }
+}
+
+function resolveName(chatId: string | undefined): string | null {
+  if (chatId && nameByChat.has(chatId)) return nameByChat.get(chatId) ?? null;
+  return null;
+}
+
 function lastTopicId(chatId: string | undefined): string | undefined {
   if (chatId && lastTopicByChat.has(chatId)) return lastTopicByChat.get(chatId);
   return undefined;
@@ -249,6 +272,16 @@ const RE = {
   smalltalk: /\b(how are you|hows it going|what'?s up|tell (me )?a joke|make me laugh|good (bot|job)|well done)\b/i,
   offTopic:
     /\b(write (me )?a (poem|story|essay|song)|sing|weather|recipe|cook|stock (price|market)|movie|netflix|song|cricket|football match|who will win|president of|prime minister|solve my (math|physics) homework|do my (assignment|homework))\b/i,
+
+  /* behavioural conversation (greetings, moods, farewells, names) */
+  bye: /\b(bye|goodbye|good\s?night|see (ya|u|you)( later)?|catch (you|u) later|gtg|g2g|tata|alvida|cya later)\b/i,
+  howAreYou: /\bhow are you\b|\bhow'?s it going\b|\bhow do you do\b|\bhow have you been\b|\bkaise ho\b/i,
+  aboutYou: /\b(what|how) about you\b|\band you\b\s*\?*$|\byour day\b/i,
+  moodGood:
+    /\b(i'?m|im|i am|feeling|doing|am)\s+(fine|good|great|okay|ok\b|nice|awesome|amazing|excited|hyped|ready|well)\b|^all good\b|^pretty good\b|^ready[\s!.]*$|^great[\s!.]*$|^good[\s!.]*$|^awesome[\s!.]*$|^nice[\s!.]*$/i,
+  moodBad:
+    /\b(i'?m|im|i am|feeling)\s+(not\s+(good|great|fine)|bad|low|sad|tired|stress(ed|ful)?|exhausted|weak|dull|demotivated|blank|lost)|^(bad|tired|stressed|sad|not good|not great|not fine)\b|\bbad day\b|\bhard day\b/i,
+  nameAsk: /\b(?:my name is|call me|i am called|you can call me)\s+([a-z][a-z' -]{1,19})\b/i,
 } as const;
 
 /* ------------------------------------------------------------------ */
@@ -612,12 +645,82 @@ function identityAnswer(): string {
   return `Good question — being precise here: I'm the **built-in offline tutor engine** of NLP Tutor AI. Not ChatGPT, not a hidden cloud model: I'm a rule-based knowledge base + answer composer that runs entirely on your machine, so I work with **no API key and no internet**. I'm transparent about this — I know NLP deeply, but I don't have web access and I won't invent APIs or results. If someone configures a provider in \`server/.env\` (\`AI_API_KEY\` / \`AI_BASE_URL\` / \`AI_MODEL\`), replies switch to that live model instead — this app tells you which mode is active in the header.`;
 }
 
-function greetingAnswer(): string {
-  return pick([
-    `Hey! 👋 I'm your NLP study tutor — I explain topics with intuition and examples, write runnable Python, compare methods, drill you with practice questions, and ground answers in your uploaded notes. All offline, no API key needed.\n\nWhat are we studying today? Try **“explain attention step by step”** or **“stemming vs lemmatization”**.`,
-    `Hello! 👋 Ready for some NLP? I can teach tokenization, TF-IDF, transformers and 17 more topics, with code and exam prep. Try **“quiz me on embeddings”** or paste a question — or ask **“what topics do you cover?”**`,
-    `Hi there! 👋 Your NLP tutor here — offline and ready. Deep lessons, Python snippets, comparison tables, practice questions. What's on your plate: theory, code, or exam prep?`,
+function greetingAnswer(
+  chatId: string | undefined,
+  history: Array<{ role: "user" | "assistant"; content: string }>,
+  raw: string,
+): string {
+  const name = resolveName(chatId);
+  const last = resolveLastTopic(chatId, history);
+  const returning = Boolean(last) || history.some((h) => h.role === "user" && h.content.trim());
+  const time = /\bmorning\b/i.test(raw)
+    ? "Good morning"
+    : /\bafternoon\b/i.test(raw)
+      ? "Good afternoon"
+      : /\b(evening|night)\b/i.test(raw)
+        ? "Good evening"
+        : null;
+  const greet = time
+    ? `${time}${name ? `, ${name}` : ""}! 👋`
+    : name && returning
+      ? `Welcome back, ${name}! 👋`
+      : name
+        ? `Hey ${name}! 👋`
+        : returning
+          ? `Welcome back! 👋`
+          : pick([`Hey! 👋`, `Hello${time ? "" : " there"}! 👋`, `Hi! 👋`]);
+
+  if (returning && last) {
+    return `${greet} I'm your NLP study tutor — still fully offline, still ready.\n\nLast time we were looking at **${last.title.replace(/\s*\(.*\)$/, "")}**. Pick up where we left off (**"explain it more deeply"** or **"ask me a practice question"**), or start something new — what would you like?`;
+  }
+  if (returning) {
+    return `${greet} I'm your NLP study tutor. We've chatted before but I don't have a topic on record (memory resets with every server restart — honest limitation).\n\nWhat's on today's plan: a new topic, Python code, practice questions, or exam prep?`;
+  }
+  const ask = pick([
+    `What are we studying today — theory, Python, or exam prep?`,
+    `How's the syllabus treating you — anything particular giving trouble?`,
+    `Ready to dive in, or shall I suggest a topic first?`,
   ]);
+  return `${greet} I'm your NLP study tutor — 20 topics explained with intuition, runnable Python code, comparison tables and practice drills. All offline, no API key needed.\n\n${ask} Try **"explain attention step by step"**, or ask **"what topics do you cover?"**`;
+}
+
+function goodbyeAnswer(chatId: string | undefined): string {
+  const name = resolveName(chatId);
+  const you = name ? `, ${name}` : "";
+  return pick([
+    `See you${you}! 👋 Your roadmap and quiz progress are saved in the browser — drop by anytime. Good luck with the studies!`,
+    `Bye${you}! 🙌 Remember: the night before an exam, my **"exam notes on …"** summaries are at your service. Take care!`,
+    `Goodbye${you}! I'll remember ${name ? "your name" : "the topics we covered"} next time we chat (as long as the server isn't restarted). Happy studying! 📚`,
+  ]);
+}
+
+function howAreYouAnswer(): string {
+  return pick([
+    `Doing great, thanks for asking! 😄 I never run out of energy for NLP — this is basically my favourite subject.\n\nMore importantly — how is YOUR preparation going? Give me one word and I'll shape today's plan around it.`,
+    `All systems running smoothly — no API calls, no downtime, endless patience ☕\n\nHow about you: fresh and focused, or running on fumes? That decides whether we do a deep lesson or a quick revision round.`,
+  ]);
+}
+
+function aboutYouAnswer(): string {
+  return `Me? I'm the resident text nerd 🤓 — my entire world is made of tokens, embeddings and exam notes. I never get bored and never sleep.\n\nBut this session is about YOU: which topic shall we take — or tell me how your prep is going and I'll pick for you?`;
+}
+
+function moodGoodAnswer(): string {
+  return pick([
+    `Love that energy! 🙌 Let's spend it well:\n- Say **"explain <topic> step by step"** for a deep dive,\n- **"ask me a practice question"** to check sharpness,\n- or **"exam notes on <topic>"** to bank some revision. What'll it be?`,
+    `Great to hear! 😄 While the streak is hot, want to try something slightly outside the comfort zone — embeddings? attention? BERT vs GPT? Just name the topic.`,
+  ]);
+}
+
+function moodBadAnswer(): string {
+  return pick([
+    `That's okay — rough days happen, and they don't erase what you know 💙\n\nLet's go gentle: I can give you a **short, simple version** of any topic (say **"simplify tokenization"**), do a **5-minute practice question**, or just map out a realistic plan from the **Roadmap** tab. What feels doable right now?`,
+    `Sorry to hear that 😔 No pressure here. Want an encouraging half-triumph? Pick the topic that's annoying you and say **"explain it simply"** — I'll make it bite-sized. (Or take a break; the **Roadmap** will still be here tomorrow.)`,
+  ]);
+}
+
+function nameAnswer(name: string): string {
+  return `Nice to meet you, **${name}**! 🤝 I'll remember that name for this session.\n\nSo ${name}, what brings you here today — a topic lesson, Python code, practice questions, or exam prep? (Say **"topics"** if you want the full menu.)`;
 }
 
 function thanksAnswer(): string {
@@ -720,15 +823,70 @@ export interface OfflineContext {
   history?: Array<{ role: "user" | "assistant"; content: string }>;
 }
 
-export function composeOfflineAnswer(ctx: OfflineContext): string {
+/* Reply shape: composed text + a coarse intent tag (used by the client to
+   pick sensible follow-up chips, e.g. explorer chips under a greeting). */
+export type OfflineIntent =
+  | "greeting"
+  | "bye"
+  | "mood"
+  | "name"
+  | "confirmation"
+  | "decline"
+  | "conversation"
+  | "capabilities"
+  | "identity"
+  | "topics"
+  | "glossary-point"
+  | "roadmap-point"
+  | "quiz-point"
+  | "notes-point"
+  | "need-topic"
+  | "lesson"
+  | "compare"
+  | "code"
+  | "practice"
+  | "reveal"
+  | "exam"
+  | "simple"
+  | "example"
+  | "detail"
+  | "off-topic"
+  | "unknown";
+
+const BAD_NAME_CAPTURE = /^(later|tomorrow|today|back|again|now|soon|anytime|ok|okay)$/i;
+
+export interface ComposedReply {
+  text: string;
+  intent: OfflineIntent;
+}
+
+export function composeOffline(ctx: OfflineContext): ComposedReply {
   const message = ctx.message.trim();
 
   /* ---------- 0) quick conversational lanes that outrank topics ------ */
   // (greetings/thanks are only checked AFTER topic matching fails, except
   // pure-greeting which must win even if message contains stray words.)
-  if (RE.greeting.test(message) && message.length <= 30) return greetingAnswer();
-  if (RE.yes.test(message)) return yesAnswer(resolveLastTopic(ctx.chatId, ctx.history ?? []));
-  if (RE.no.test(message)) return noAnswer();
+  if (RE.greeting.test(message) && message.length <= 30) {
+    return { text: greetingAnswer(ctx.chatId, ctx.history ?? [], message), intent: "greeting" };
+  }
+  if (RE.bye.test(message)) {
+    return { text: goodbyeAnswer(ctx.chatId), intent: "bye" };
+  }
+  const nameMatch = message.match(RE.nameAsk);
+  const capturedName = nameMatch?.[1] ? tidyName(nameMatch[1]) : "";
+  if (capturedName && !BAD_NAME_CAPTURE.test(capturedName)) {
+    rememberName(ctx.chatId, capturedName);
+    return { text: nameAnswer(capturedName), intent: "name" };
+  }
+  if (RE.moodGood.test(message)) return { text: moodGoodAnswer(), intent: "mood" };
+  if (RE.moodBad.test(message)) return { text: moodBadAnswer(), intent: "mood" };
+  if (RE.yes.test(message)) {
+    return {
+      text: yesAnswer(resolveLastTopic(ctx.chatId, ctx.history ?? [])),
+      intent: "confirmation",
+    };
+  }
+  if (RE.no.test(message)) return { text: noAnswer(), intent: "decline" };
 
   /* ---------- 1) topical matching ------------------------------------ */
   const ranked = scoreAll(message);
@@ -747,7 +905,7 @@ export function composeOfflineAnswer(ctx: OfflineContext): string {
     !RE.practice.test(message) &&
     !RE.code.test(message)
   ) {
-    return roadmapPointerAnswer();
+    return { text: roadmapPointerAnswer(), intent: "roadmap-point" };
   }
 
   const followupKind: "code" | "practice" | "detail" | "example" | "exam" | "simple" | null = (() => {
@@ -775,12 +933,12 @@ export function composeOfflineAnswer(ctx: OfflineContext): string {
       });
       if (curated) {
         rememberTopic(ctx.chatId, CARD_BY_ID.get(best.card.id) ?? best.card);
-        return compareFromTable(curated);
+        return { text: compareFromTable(curated), intent: "compare" };
       }
       const second = matches.find((m) => m.card.id !== best.card.id);
       if (second) {
         rememberTopic(ctx.chatId, best.card);
-        return genericCompare(best.card, second.card);
+        return { text: genericCompare(best.card, second.card), intent: "compare" };
       }
       // fall through to normal topic treatment if only one card matched
     }
@@ -788,62 +946,82 @@ export function composeOfflineAnswer(ctx: OfflineContext): string {
     rememberTopic(ctx.chatId, best.card);
 
     /* quiz page pointer */
-    if (RE.quizPage.test(message) && !RE.practice.test(message)) return quizPointerAnswer(best.card);
+    if (RE.quizPage.test(message) && !RE.practice.test(message)) {
+      return { text: quizPointerAnswer(best.card), intent: "quiz-point" };
+    }
 
     /* topical answers with modifiers */
-    if (followupKind === "code") return codeAnswer(best.card);
-    if (followupKind === "practice") return practiceAnswer(best.card);
+    if (followupKind === "code") return { text: codeAnswer(best.card), intent: "code" };
+    if (followupKind === "practice") return { text: practiceAnswer(best.card), intent: "practice" };
     if (followupKind === "exam") {
       // "Generate important NLP exam questions" only matches the generic
       // intro card — the general exam sheet reads better than one topic's.
-      return best.card.id === "intro" ? generalExamAnswer() : examAnswer([best.card]);
+      const text = best.card.id === "intro" ? generalExamAnswer() : examAnswer([best.card]);
+      return { text, intent: "exam" };
     }
-    if (followupKind === "simple") return simpleAnswer(best.card);
-    if (followupKind === "example") return exampleAnswer(best.card);
-    if (followupKind === "detail" || RE.deepish.test(message)) return fullLesson(best.card);
-    return quickAnswer(best.card);
+    if (followupKind === "simple") return { text: simpleAnswer(best.card), intent: "simple" };
+    if (followupKind === "example") return { text: exampleAnswer(best.card), intent: "example" };
+    if (followupKind === "detail" || RE.deepish.test(message)) {
+      return { text: fullLesson(best.card), intent: "lesson" };
+    }
+    return { text: quickAnswer(best.card), intent: "lesson" };
   }
 
   /* ---------- 2) follow-ups riding on the last topic ------------------ */
   if (RE.reveal.test(message)) {
     const last = resolveLastTopic(ctx.chatId, ctx.history ?? []);
-    return revealAnswer(last);
+    return { text: revealAnswer(last), intent: "reveal" };
   }
-  if (RE.quizPage.test(message)) return quizPointerAnswer(null);
+  if (RE.quizPage.test(message)) {
+    return { text: quizPointerAnswer(null), intent: "quiz-point" };
+  }
   if (followupKind) {
     const last = resolveLastTopic(ctx.chatId, ctx.history ?? []);
-    if (followupKind === "exam" && !last) return generalExamAnswer();
+    if (followupKind === "exam" && !last) {
+      return { text: generalExamAnswer(), intent: "exam" };
+    }
     if (last) {
       rememberTopic(ctx.chatId, last);
       switch (followupKind) {
         case "code":
-          return codeAnswer(last);
+          return { text: codeAnswer(last), intent: "code" };
         case "practice":
-          return practiceAnswer(last);
+          return { text: practiceAnswer(last), intent: "practice" };
         case "exam":
-          return examAnswer([last]);
+          return { text: examAnswer([last]), intent: "exam" };
         case "simple":
-          return simpleAnswer(last);
+          return { text: simpleAnswer(last), intent: "simple" };
         case "example":
-          return exampleAnswer(last);
+          return { text: exampleAnswer(last), intent: "example" };
         case "detail":
-          return fullLesson(last);
+          return { text: fullLesson(last), intent: "lesson" };
       }
     }
-    return needTopicAnswer(followupKind);
+    return { text: needTopicAnswer(followupKind), intent: "need-topic" };
   }
 
   /* ---------- 3) pure conversation ----------------------------------- */
-  if (RE.glossary.test(message)) return glossaryPointerAnswer();
-  if (RE.capabilities.test(message)) return capabilitiesAnswer();
-  if (RE.identity.test(message)) return identityAnswer();
-  if (RE.topicsList.test(message)) return topicsAnswer();
-  if (RE.thanks.test(message)) return thanksAnswer();
-  if (RE.smalltalk.test(message)) return smalltalkAnswer();
-  if (RE.offTopic.test(message)) return offTopicAnswer();
+  if (RE.glossary.test(message)) {
+    return { text: glossaryPointerAnswer(), intent: "glossary-point" };
+  }
+  if (RE.capabilities.test(message)) {
+    return { text: capabilitiesAnswer(), intent: "capabilities" };
+  }
+  if (RE.identity.test(message)) return { text: identityAnswer(), intent: "identity" };
+  if (RE.topicsList.test(message)) return { text: topicsAnswer(), intent: "topics" };
+  if (RE.howAreYou.test(message)) return { text: howAreYouAnswer(), intent: "conversation" };
+  if (RE.aboutYou.test(message)) return { text: aboutYouAnswer(), intent: "conversation" };
+  if (RE.thanks.test(message)) return { text: thanksAnswer(), intent: "conversation" };
+  if (RE.smalltalk.test(message)) return { text: smalltalkAnswer(), intent: "conversation" };
+  if (RE.offTopic.test(message)) return { text: offTopicAnswer(), intent: "off-topic" };
 
   /* ---------- 4) unknown --------------------------------------------- */
-  return unknownAnswer(ranked, message);
+  return { text: unknownAnswer(ranked, message), intent: "unknown" };
+}
+
+/** Text-only view kept for compatibility (tests, callers that ignore intent). */
+export function composeOfflineAnswer(ctx: OfflineContext): string {
+  return composeOffline(ctx).text;
 }
 
 /* ------------------------------------------------------------------ */

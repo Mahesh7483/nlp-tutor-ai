@@ -118,6 +118,12 @@ Keys live only in `server/.env` (git-ignored) and are never sent to the browser.
   comparison requests, code asks, exam prep and practice questions with human-like streaming pacing
   (thinking pause → jittered chunks → paragraph slowdowns). Honest when it doesn't know something
   instead of inventing an answer.
+- **Behavioural engagement** — greetings vary by time of day, welcome you back by name ("my name
+  is Rahul") and resume the last discussed topic; the tutor asks you questions back ("how's your
+  prep going?"), reads mood replies ("i'm feeling stressed today" gets support + easier options),
+  and says a proper goodbye. Every reply carries an intent tag, so follow-up chips adapt:
+  explorer chips ("What topics do you cover?", "How should I start learning NLP?") under
+  conversational answers, topic chips (code / deepen / practice) under lessons.
 - **Conversational memory of the topic** — "explain it more deeply", "show me the Python code",
   "ask me a practice question", "show answer" one-click chips (and typed phrasings) resolve against
   the last discussed topic per chat. Every session starts with a one-time offline banner, not one
@@ -159,11 +165,11 @@ Keys live only in `server/.env` (git-ignored) and are never sent to the browser.
 All of the following were actually run during development on this machine:
 
 - `tsc --noEmit` for server and client — clean.
-- Server unit tests (`npm test` in `server/`) — **21/21 pass**: quiz bank integrity/sampling,
+- Server unit tests (`npm test` in `server/`) — **26/26 pass**: quiz bank integrity/sampling,
   chunk/grounding retrieval behaviour, and a dedicated offline-engine suite (knowledge-base integrity,
   greetings, lessons, per-chat follow-up memory, comparison tables, practice→reveal loop, exam sheets,
   quiz routing, honest bounding of scope, one-per-chat banner, typo/paraphrase catching, glossary +
-  roadmap routing).
+  roadmap routing, fresh/returning/name/mood/goodbye behavioural conversation).
 - Vite production build — clean (bundle split into index/markdown/katex chunks).
 - API tests against the running backend (offline mode, no credentials):
   - `GET /api/health` → `{ mode: "demo", requires: [...] }` (demo/offline protocol value kept for compatibility)
@@ -173,15 +179,19 @@ All of the following were actually run during development on this machine:
     off-topic refusal, unknown-topic honesty, and the offline banner appearing only on the first
     message of a chat — plus a 9-case catch battery (typo'd questions → full lessons, spaced
     "tf idf", typo'd comparisons → curated table, roadmap/glossary routing, unchanged honest
-    refusal for truly out-of-scope asks).
+    refusal for truly out-of-scope asks) and a 10-case intent battery (greeting/returning/name/
+    mood/goodbye/conversation/lesson/compare intents riding on the `done` SSE event).
   - empty message → HTTP 400 with validation message; >8000-char message → HTTP 400
   - chat for a non-existent docId → HTTP 404 with a re-upload hint
   - grounded doc question (txt and 2-page PDF) → excerpts cited `[Notes p.1]` / `[Notes p.2]`
   - `POST /api/documents` txt + PDF (201, pages/chars extracted), unsupported type → 415 with message
   - `POST /api/quiz` → filtered questions from the built-in bank (`source: "built-in"`)
+- Found and fixed during browser testing: chats longer than **30 messages** triggered HTTP 400 on
+  every new send (the server validates history length; the client kept sending the full history),
+  which showed up as silently empty bubbles. The client now trims sent history to 30 and error text
+  is recorded on the message reliably.
 - Browser smoke tests (desktop viewport + narrow layout): welcome screen, streaming answers with the
-  offline banner + "offline" message tag, sending via the follow-up chips (practice → show answer;
-  code; deep lesson — all verifying rendered content, syntax-highlighted code with correct text), 
+  offline banner + "offline" message tag, sending via the follow-up chips (practice → show answer;  code; deep lesson — all verifying rendered content, syntax-highlighted code with correct text), 
   header "Offline tutor" pill, regenerate, stop mid-stream (partial text kept, "generation stopped"
   marker), theme toggle (+ persistence), chat create/rename/delete, quiz generate→answer→submit,
   glossary search + ask-tutor jump, document upload → attach → grounded answer with page tags,

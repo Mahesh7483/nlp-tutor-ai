@@ -35,6 +35,8 @@ export interface ChatStreamEvent {
   model?: string | null;
   text?: string;
   message?: string;
+  /** Coarse reply-shape tag emitted by the offline engine (drives follow-up chips). */
+  intent?: string;
 }
 
 /* ---------- chat history (localStorage) ---------- */
@@ -48,6 +50,8 @@ export interface StoredMessage {
   error?: string;
   stopped?: boolean;
   mode?: ProviderMode;
+  /** offline-engine reply-shape tag (drives follow-up chips) */
+  intent?: string;
 }
 
 export interface StoredChat {

@@ -10,7 +10,7 @@ import {
 } from "../services/aiProvider.js";
 import {
   OFFLINE_BANNER,
-  composeOfflineAnswer,
+  composeOffline,
   shouldShowOfflineBanner,
 } from "../services/offlineTutor.js";
 import { retrieveGrounding, hasDocument, getDocument } from "../services/docStore.js";
@@ -83,8 +83,10 @@ chatRouter.post(
         // Offline engine: grounded doc questions quote retrieved excerpts;
         // everything else is composed by the built-in tutor engine.
         let answer: string;
+        let intent: string | undefined;
         const banner = shouldShowOfflineBanner(body.chatId) ? OFFLINE_BANNER : "";
         if (body.docQuestion && body.docId) {
+          intent = "notes-point";
           const grounding = retrieveGrounding(body.docId, body.message);
           if (grounding) {
             const excerpts = grounding.chunks
@@ -98,11 +100,13 @@ chatRouter.post(
             answer = `${banner}The document you referenced no longer exists on the server. Please re-upload it from the **Documents** panel.`;
           }
         } else {
-          answer = banner + composeOfflineAnswer({
+          const composed = composeOffline({
             chatId: body.chatId,
             message: body.message,
             history: body.history,
           });
+          intent = composed.intent;
+          answer = banner + composed.text;
         }
         // Human-ish rhythm: a short "thinking" pause, then variable-size
         // chunks with jitter, easing off at paragraph breaks.
@@ -115,7 +119,7 @@ chatRouter.post(
           i += take;
           await sleep(chunk.includes("\n\n") ? 70 + Math.random() * 80 : 6 + Math.random() * 12);
         }
-        if (!abort.signal.aborted) writeEvent(res, { type: "done" });
+        if (!abort.signal.aborted) writeEvent(res, { type: "done", intent });
       } else {
         const upstream = buildUpstreamMessages(body, systemPrompt);
         await streamChatCompletion(
